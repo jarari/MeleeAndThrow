@@ -117,7 +117,7 @@ target_compile_features(
 )
 
 include_directories(
-		${CMAKE_CURRENT_SOURCE_DIR}/../Utilities
+		${CMAKE_SOURCE_DIR}/Utilities
 )
 
 target_include_directories(
@@ -125,6 +125,7 @@ target_include_directories(
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}/include
 		${CMAKE_CURRENT_SOURCE_DIR}/src
+		${CMAKE_SOURCE_DIR}/Utilities
 )
 
 target_link_libraries(
