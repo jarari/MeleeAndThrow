@@ -63,7 +63,7 @@ public:
 	}
 
 	void HookedPerformInputProcessing(const InputEvent* a_queueHead) {
-		if (!UI::GetSingleton()->menuMode && a_queueHead) {
+		if (!UI::GetSingleton()->menuMode && !UI::GetSingleton()->GetMenuOpen("LooksMenu") && a_queueHead) {
 			ProcessButtonEvent((ButtonEvent*)a_queueHead);
 		}
 		FnPerformInputProcessing fn = fnHash.at(*(uint64_t*)this);
