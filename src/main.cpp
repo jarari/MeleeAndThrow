@@ -12,8 +12,6 @@ BGSEquipSlot* grenadeSlot;
 Setting* fThrowDelay;
 uint32_t meleeKey;
 uint32_t throwKey;
-uint32_t defaultKey;
-INPUT_DEVICE defaultDevice;
 
 class InputEventReceiverOverride : public BSInputEventReceiver {
 public:
@@ -36,23 +34,30 @@ public:
 			BSInputEventUser* handler = (BSInputEventUser*)pcon->meleeThrowHandler;
 			float minDelay = fThrowDelay->GetFloat();
 			if (id == meleeKey && evn->value == 0.f) {
-				evn->idCode = defaultKey;
-				evn->device = defaultDevice;
-				evn->deviceID = (int32_t)defaultDevice;
-				evn->heldDownSecs = max(minDelay - 0.1f, 0.f);
-				*(uint8_t*)((uintptr_t)handler + 0x29) = 1;
-				handler->OnButtonEvent(evn);
+				bool canMelee = pcon->CanPerformAction((uint32_t)DEFAULT_OBJECT::kActionMelee);
+				if (canMelee) {
+					evn->heldDownSecs = max(minDelay - 0.1f, 0.f);
+					*(uint8_t*)((uintptr_t)handler + 0x29) = 1;
+					handler->OnButtonEvent(evn);
+				}
 			}
 			else if (id == throwKey) {
 				if (p->currentProcess && p->currentProcess->middleHigh) {
-					bool hasGrenade = pcon->CanPerformAction(0x76);
-					if (hasGrenade) {
-						evn->idCode = defaultKey;
-						evn->device = defaultDevice;
-						evn->deviceID = (int32_t)defaultDevice;
-						evn->heldDownSecs = minDelay + 20.f;
-						*(uint8_t*)((uintptr_t)handler + 0x29) = 1;
-						handler->OnButtonEvent(evn);
+					bool canThrow = pcon->CanPerformAction((uint32_t)DEFAULT_OBJECT::kActionThrow);
+					if (canThrow) {
+						bool hasGrenade = false;
+						p->currentProcess->middleHigh->equippedItemsLock.lock();
+						for (auto it = p->currentProcess->middleHigh->equippedItems.begin(); it != p->currentProcess->middleHigh->equippedItems.end(); ++it) {
+							if (it->equipIndex.index == 2) {
+								hasGrenade = true;
+							}
+						}
+						p->currentProcess->middleHigh->equippedItemsLock.unlock();
+						if (hasGrenade) {
+							evn->heldDownSecs = minDelay + 20.f;
+							*(uint8_t*)((uintptr_t)handler + 0x29) = 1;
+							handler->OnButtonEvent(evn);
+						}
 					}
 				}
 			}
@@ -63,7 +68,7 @@ public:
 	}
 
 	void HookedPerformInputProcessing(const InputEvent* a_queueHead) {
-		if (!UI::GetSingleton()->menuMode && !UI::GetSingleton()->GetMenuOpen("LooksMenu") && a_queueHead) {
+		if (!UI::GetSingleton()->menuMode && !UI::GetSingleton()->GetMenuOpen("LooksMenu") && !UI::GetSingleton()->GetMenuOpen("ScopeMenu") && a_queueHead) {
 			ProcessButtonEvent((ButtonEvent*)a_queueHead);
 		}
 		FnPerformInputProcessing fn = fnHash.at(*(uint64_t*)this);
@@ -101,24 +106,37 @@ void FindDefaultKey() {
 		BSTArray<ControlMap::UserEventMapping>& mouseMap =
 			cm->controlMaps[(int)UserEvents::INPUT_CONTEXT_ID::kMainGameplay]->deviceMappings[(int)INPUT_DEVICE::kMouse];
 		for (auto it = mouseMap.begin(); it != mouseMap.end(); ++it) {
-			if (it->inputKey != 255) {
-				if (it->eventID == std::string("Melee")) {
-					defaultKey = it->inputKey;
-					defaultDevice = INPUT_DEVICE::kMouse;
+			if (it->inputKey != 0xff) {
+				if (it->eventID == "Melee") {
+					it->inputKey = 0xff;
+					it->remappable = false;
 				}
+				_MESSAGE("Mouse %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
 			}
 		}
 		BSTArray<ControlMap::UserEventMapping>& keyboardMap =
 			cm->controlMaps[(int)UserEvents::INPUT_CONTEXT_ID::kMainGameplay]->deviceMappings[(int)INPUT_DEVICE::kKeyboard];
 		for (auto it = keyboardMap.begin(); it != keyboardMap.end(); ++it) {
-			if (it->inputKey != 255) {
-				if (it->eventID == std::string("Melee")) {
-					defaultKey = it->inputKey;
-					defaultDevice = INPUT_DEVICE::kKeyboard;
+			if (it->inputKey != 0xff) {
+				if (it->eventID == "Melee") {
+					it->inputKey = 0xff;
+					it->remappable = false;
 				}
+				_MESSAGE("Keyboard %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
 			}
 		}
-		_MESSAGE("defaultKey %02x", defaultKey);
+		BSTArray<ControlMap::UserEventMapping>& gamepadMap =
+			cm->controlMaps[(int)UserEvents::INPUT_CONTEXT_ID::kMainGameplay]->deviceMappings[(int)INPUT_DEVICE::kGamepad];
+		for (auto it = gamepadMap.begin(); it != gamepadMap.end(); ++it) {
+			if (it->inputKey != 0xff) {
+				if (it->eventID == "Melee") {
+					it->inputKey = 0xff;
+					it->remappable = false;
+				}
+				_MESSAGE("Gamepad %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
+			}
+		}
+		cm->SaveRemappings();
 	}
 }
 
@@ -156,8 +174,8 @@ void InitializePlugin() {
 	if (fThrowDelay) {
 		_MESSAGE("fThrowDelay:Controls found");
 		((InputEventReceiverOverride*)((uint64_t)pcam + 0x38))->HookSink();
-		MenuWatcher* mw = new MenuWatcher();
-		UI::GetSingleton()->GetEventSource<MenuOpenCloseEvent>()->RegisterSink(mw);
+		//MenuWatcher* mw = new MenuWatcher();
+		//UI::GetSingleton()->GetEventSource<MenuOpenCloseEvent>()->RegisterSink(mw);
 	}
 }
 
@@ -219,11 +237,9 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f
 			LoadConfigs();
 		}
 		else if (msg->type == F4SE::MessagingInterface::kPreLoadGame) {
-			FindDefaultKey();
 			LoadConfigs();
 		}
 		else if (msg->type == F4SE::MessagingInterface::kNewGame) {
-			FindDefaultKey();
 			LoadConfigs();
 		}
 	});
