@@ -100,10 +100,10 @@ protected:
 };
 unordered_map<uint64_t, InputEventReceiverOverride::FnPerformInputProcessing> InputEventReceiverOverride::fnHash;
 
-void FindDefaultKey() {
+void RemapMelee() {
 	ControlMap* cm = ControlMap::GetSingleton();
 	if (cm) {
-		BSTArray<ControlMap::UserEventMapping>& mouseMap =
+		/*BSTArray<ControlMap::UserEventMapping>& mouseMap =
 			cm->controlMaps[(int)UserEvents::INPUT_CONTEXT_ID::kMainGameplay]->deviceMappings[(int)INPUT_DEVICE::kMouse];
 		for (auto it = mouseMap.begin(); it != mouseMap.end(); ++it) {
 			if (it->inputKey != 0xff) {
@@ -135,24 +135,13 @@ void FindDefaultKey() {
 				}
 				_MESSAGE("Gamepad %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
 			}
-		}
+		}*/
+		cm->RemapButton("Melee", INPUT_DEVICE::kKeyboard, 0xff);
+		cm->RemapButton("Melee", INPUT_DEVICE::kMouse, 0xff);
+		cm->RemapButton("Melee", INPUT_DEVICE::kGamepad, 0xff);
 		cm->SaveRemappings();
 	}
 }
-
-class MenuWatcher : public BSTEventSink<MenuOpenCloseEvent> {
-	virtual BSEventNotifyControl ProcessEvent(const MenuOpenCloseEvent& evn, BSTEventSource<MenuOpenCloseEvent>* src) override {
-		if (evn.menuName == BSFixedString("MainMenu") && !evn.opening) {
-			FindDefaultKey();
-		}
-		else if (evn.menuName == BSFixedString("LoadingMenu") && !evn.opening) {
-			FindDefaultKey();
-		}
-		return BSEventNotifyControl::kContinue;
-	}
-public:
-	F4_HEAP_REDEFINE_NEW(MenuWatcher);
-};
 
 void LoadConfigs() {
 	ini.LoadFile("Data\\F4SE\\Plugins\\MeleeAndThrow.ini");
@@ -174,8 +163,6 @@ void InitializePlugin() {
 	if (fThrowDelay) {
 		_MESSAGE("fThrowDelay:Controls found");
 		((InputEventReceiverOverride*)((uint64_t)pcam + 0x38))->HookSink();
-		//MenuWatcher* mw = new MenuWatcher();
-		//UI::GetSingleton()->GetEventSource<MenuOpenCloseEvent>()->RegisterSink(mw);
 	}
 }
 
@@ -233,7 +220,7 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f
 	message->RegisterListener([](F4SE::MessagingInterface::Message* msg) -> void {
 		if (msg->type == F4SE::MessagingInterface::kGameDataReady) {
 			InitializePlugin();
-			FindDefaultKey();
+			RemapMelee();
 			LoadConfigs();
 		}
 		else if (msg->type == F4SE::MessagingInterface::kPreLoadGame) {
