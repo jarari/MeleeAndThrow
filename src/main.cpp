@@ -13,11 +13,13 @@ Setting* fThrowDelay;
 uint32_t meleeKey;
 uint32_t throwKey;
 
-class InputEventReceiverOverride : public BSInputEventReceiver {
+class InputEventReceiverOverride : public BSInputEventReceiver
+{
 public:
-	typedef void (InputEventReceiverOverride::* FnPerformInputProcessing)(const InputEvent* a_queueHead);
+	typedef void (InputEventReceiverOverride::*FnPerformInputProcessing)(const InputEvent* a_queueHead);
 
-	void ProcessButtonEvent(ButtonEvent* evn) {
+	void ProcessButtonEvent(ButtonEvent* evn)
+	{
 		if (evn->eventType != INPUT_EVENT_TYPE::kButton) {
 			if (evn->next)
 				ProcessButtonEvent((ButtonEvent*)evn->next);
@@ -34,16 +36,15 @@ public:
 			BSInputEventUser* handler = (BSInputEventUser*)pcon->meleeThrowHandler;
 			float minDelay = fThrowDelay->GetFloat();
 			if (id == meleeKey && evn->value == 0.f) {
-				bool canMelee = pcon->CanPerformAction((uint32_t)DEFAULT_OBJECT::kActionMelee);
+				bool canMelee = pcon->CanPerformAction(DEFAULT_OBJECT::kActionMelee);
 				if (canMelee) {
 					evn->heldDownSecs = max(minDelay - 0.1f, 0.f);
 					*(uint8_t*)((uintptr_t)handler + 0x29) = 1;
 					handler->OnButtonEvent(evn);
 				}
-			}
-			else if (id == throwKey) {
+			} else if (id == throwKey) {
 				if (p->currentProcess && p->currentProcess->middleHigh) {
-					bool canThrow = pcon->CanPerformAction((uint32_t)DEFAULT_OBJECT::kActionThrow);
+					bool canThrow = pcon->CanPerformAction(DEFAULT_OBJECT::kActionThrow);
 					if (canThrow) {
 						bool hasGrenade = false;
 						p->currentProcess->middleHigh->equippedItemsLock.lock();
@@ -67,7 +68,8 @@ public:
 			ProcessButtonEvent((ButtonEvent*)evn->next);
 	}
 
-	void HookedPerformInputProcessing(const InputEvent* a_queueHead) {
+	void HookedPerformInputProcessing(const InputEvent* a_queueHead)
+	{
 		if (!UI::GetSingleton()->menuMode && !UI::GetSingleton()->GetMenuOpen("LooksMenu") && !UI::GetSingleton()->GetMenuOpen("ScopeMenu") && a_queueHead) {
 			ProcessButtonEvent((ButtonEvent*)a_queueHead);
 		}
@@ -77,7 +79,8 @@ public:
 		}
 	}
 
-	void HookSink() {
+	void HookSink()
+	{
 		uint64_t vtable = *(uint64_t*)this;
 		auto it = fnHash.find(vtable);
 		if (it == fnHash.end()) {
@@ -86,7 +89,8 @@ public:
 		}
 	}
 
-	void UnHookSink() {
+	void UnHookSink()
+	{
 		uint64_t vtable = *(uint64_t*)this;
 		auto it = fnHash.find(vtable);
 		if (it == fnHash.end())
@@ -100,7 +104,8 @@ protected:
 };
 unordered_map<uint64_t, InputEventReceiverOverride::FnPerformInputProcessing> InputEventReceiverOverride::fnHash;
 
-void RemapMelee() {
+void RemapMelee()
+{
 	ControlMap* cm = ControlMap::GetSingleton();
 	if (cm) {
 		/*BSTArray<ControlMap::UserEventMapping>& mouseMap =
@@ -143,14 +148,16 @@ void RemapMelee() {
 	}
 }
 
-void LoadConfigs() {
+void LoadConfigs()
+{
 	ini.LoadFile("Data\\F4SE\\Plugins\\MeleeAndThrow.ini");
 	meleeKey = std::stoi(ini.GetValue("General", "MeleeKey", "0xA4"), 0, 16);
 	throwKey = std::stoi(ini.GetValue("General", "ThrowKey", "0x47"), 0, 16);
 	ini.Reset();
 }
 
-void InitializePlugin() {
+void InitializePlugin()
+{
 	p = PlayerCharacter::GetSingleton();
 	pcon = PlayerControls::GetSingleton();
 	pcam = PlayerCamera::GetSingleton();
@@ -222,11 +229,9 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f
 			InitializePlugin();
 			RemapMelee();
 			LoadConfigs();
-		}
-		else if (msg->type == F4SE::MessagingInterface::kPreLoadGame) {
+		} else if (msg->type == F4SE::MessagingInterface::kPreLoadGame) {
 			LoadConfigs();
-		}
-		else if (msg->type == F4SE::MessagingInterface::kNewGame) {
+		} else if (msg->type == F4SE::MessagingInterface::kNewGame) {
 			LoadConfigs();
 		}
 	});
