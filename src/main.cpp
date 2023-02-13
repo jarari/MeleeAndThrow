@@ -12,6 +12,7 @@ BGSEquipSlot* grenadeSlot;
 Setting* fThrowDelay;
 uint32_t meleeKey;
 uint32_t throwKey;
+bool forceUnbind = true;
 
 class InputEventReceiverOverride : public BSInputEventReceiver
 {
@@ -106,15 +107,18 @@ unordered_map<uint64_t, InputEventReceiverOverride::FnPerformInputProcessing> In
 
 void RemapMelee()
 {
+	if (!forceUnbind)
+		return;
+
 	ControlMap* cm = ControlMap::GetSingleton();
 	if (cm) {
-		/*BSTArray<ControlMap::UserEventMapping>& mouseMap =
+		bool meleeBound = false;
+		BSTArray<ControlMap::UserEventMapping>& mouseMap =
 			cm->controlMaps[(int)UserEvents::INPUT_CONTEXT_ID::kMainGameplay]->deviceMappings[(int)INPUT_DEVICE::kMouse];
 		for (auto it = mouseMap.begin(); it != mouseMap.end(); ++it) {
 			if (it->inputKey != 0xff) {
 				if (it->eventID == "Melee") {
-					it->inputKey = 0xff;
-					it->remappable = false;
+					meleeBound = true;
 				}
 				_MESSAGE("Mouse %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
 			}
@@ -124,8 +128,7 @@ void RemapMelee()
 		for (auto it = keyboardMap.begin(); it != keyboardMap.end(); ++it) {
 			if (it->inputKey != 0xff) {
 				if (it->eventID == "Melee") {
-					it->inputKey = 0xff;
-					it->remappable = false;
+					meleeBound = true;
 				}
 				_MESSAGE("Keyboard %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
 			}
@@ -135,16 +138,17 @@ void RemapMelee()
 		for (auto it = gamepadMap.begin(); it != gamepadMap.end(); ++it) {
 			if (it->inputKey != 0xff) {
 				if (it->eventID == "Melee") {
-					it->inputKey = 0xff;
-					it->remappable = false;
+					meleeBound = true;
 				}
 				_MESSAGE("Gamepad %s key %d remappable %d", it->eventID.c_str(), it->inputKey, it->remappable);
 			}
-		}*/
-		cm->RemapButton("Melee", INPUT_DEVICE::kKeyboard, 0xff);
-		cm->RemapButton("Melee", INPUT_DEVICE::kMouse, 0xff);
-		cm->RemapButton("Melee", INPUT_DEVICE::kGamepad, 0xff);
-		cm->SaveRemappings();
+		}
+		if (meleeBound) {
+			cm->RemapButton("Melee", INPUT_DEVICE::kKeyboard, 0xff);
+			cm->RemapButton("Melee", INPUT_DEVICE::kMouse, 0xff);
+			cm->RemapButton("Melee", INPUT_DEVICE::kGamepad, 0xff);
+			cm->SaveRemappings();
+		}
 	}
 }
 
@@ -153,6 +157,7 @@ void LoadConfigs()
 	ini.LoadFile("Data\\F4SE\\Plugins\\MeleeAndThrow.ini");
 	meleeKey = std::stoi(ini.GetValue("General", "MeleeKey", "0xA4"), 0, 16);
 	throwKey = std::stoi(ini.GetValue("General", "ThrowKey", "0x47"), 0, 16);
+	forceUnbind = std::stoi(ini.GetValue("General", "ForceUnbind", "1")) > 0;
 	ini.Reset();
 }
 
