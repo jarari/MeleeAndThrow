@@ -13,14 +13,14 @@ Setting* fThrowDelay;
 uint32_t meleeKey;
 uint32_t throwKey;
 bool forceUnbind = true;
+bool inLooksMenu = false;
+bool inScopeMenu = false;
 
-class InputEventReceiverOverride : public BSInputEventReceiver
-{
+class InputEventReceiverOverride : public BSInputEventReceiver {
 public:
-	typedef void (InputEventReceiverOverride::*FnPerformInputProcessing)(const InputEvent* a_queueHead);
+	typedef void (InputEventReceiverOverride::* FnPerformInputProcessing)(const InputEvent* a_queueHead);
 
-	void ProcessButtonEvent(ButtonEvent* evn)
-	{
+	void ProcessButtonEvent(ButtonEvent* evn) {
 		if (evn->eventType != INPUT_EVENT_TYPE::kButton) {
 			if (evn->next)
 				ProcessButtonEvent((ButtonEvent*)evn->next);
@@ -43,7 +43,8 @@ public:
 					*(uint8_t*)((uintptr_t)handler + 0x29) = 1;
 					handler->OnButtonEvent(evn);
 				}
-			} else if (id == throwKey) {
+			}
+			else if (id == throwKey) {
 				if (p->currentProcess && p->currentProcess->middleHigh) {
 					bool canThrow = pcon->CanPerformAction(DEFAULT_OBJECT::kActionThrow);
 					if (canThrow) {
@@ -69,9 +70,8 @@ public:
 			ProcessButtonEvent((ButtonEvent*)evn->next);
 	}
 
-	void HookedPerformInputProcessing(const InputEvent* a_queueHead)
-	{
-		if (!UI::GetSingleton()->menuMode && !UI::GetSingleton()->GetMenuOpen("LooksMenu") && !UI::GetSingleton()->GetMenuOpen("ScopeMenu") && a_queueHead) {
+	void HookedPerformInputProcessing(const InputEvent* a_queueHead) {
+		if (!UI::GetSingleton()->menuMode && !inLooksMenu && !inScopeMenu && a_queueHead) {
 			ProcessButtonEvent((ButtonEvent*)a_queueHead);
 		}
 		FnPerformInputProcessing fn = fnHash.at(*(uint64_t*)this);
@@ -80,8 +80,7 @@ public:
 		}
 	}
 
-	void HookSink()
-	{
+	void HookSink() {
 		uint64_t vtable = *(uint64_t*)this;
 		auto it = fnHash.find(vtable);
 		if (it == fnHash.end()) {
@@ -90,8 +89,7 @@ public:
 		}
 	}
 
-	void UnHookSink()
-	{
+	void UnHookSink() {
 		uint64_t vtable = *(uint64_t*)this;
 		auto it = fnHash.find(vtable);
 		if (it == fnHash.end())
@@ -105,8 +103,7 @@ protected:
 };
 unordered_map<uint64_t, InputEventReceiverOverride::FnPerformInputProcessing> InputEventReceiverOverride::fnHash;
 
-void RemapMelee()
-{
+void RemapMelee() {
 	if (!forceUnbind)
 		return;
 
@@ -152,23 +149,43 @@ void RemapMelee()
 	}
 }
 
-void LoadConfigs()
-{
+class MenuWatcher : public BSTEventSink<MenuOpenCloseEvent> {
+	virtual BSEventNotifyControl ProcessEvent(const MenuOpenCloseEvent& evn, BSTEventSource<MenuOpenCloseEvent>* src) override {
+		if (evn.menuName == "ScopeMenu") {
+			if (evn.opening) {
+				inScopeMenu = true;
+			}
+			else {
+				inScopeMenu = false;
+			}
+		}
+		else if (evn.menuName == "LooksMenu") {
+			if (evn.opening) {
+				inLooksMenu = true;
+			}
+			else {
+				inLooksMenu = false;
+			}
+		}
+		return BSEventNotifyControl::kContinue;
+	}
+};
+
+void LoadConfigs() {
 	ini.LoadFile("Data\\F4SE\\Plugins\\MeleeAndThrow.ini");
 	meleeKey = std::stoi(ini.GetValue("General", "MeleeKey", "0xA4"), 0, 16);
 	throwKey = std::stoi(ini.GetValue("General", "ThrowKey", "0x47"), 0, 16);
-	forceUnbind = std::stoi(ini.GetValue("General", "ForceUnbind", "1")) > 0;
+	forceUnbind = std::stoi(ini.GetValue("General", "ForceUnbind", "0")) > 0;
 	ini.Reset();
 }
 
-void InitializePlugin()
-{
+void InitializePlugin() {
 	p = PlayerCharacter::GetSingleton();
 	pcon = PlayerControls::GetSingleton();
 	pcam = PlayerCamera::GetSingleton();
 	grenadeSlot = (BGSEquipSlot*)TESForm::GetFormByID(0x46AAC);
 	for (auto it = INISettingCollection::GetSingleton()->settings.begin(); it != INISettingCollection::GetSingleton()->settings.end(); ++it) {
-		if (strcmp((*it)->_key, "fThrowDelay:Controls") == 0) {
+		if ((*it)->GetKey() == "fThrowDelay:Controls") {
 			fThrowDelay = *it;
 		}
 	}
@@ -176,10 +193,11 @@ void InitializePlugin()
 		_MESSAGE("fThrowDelay:Controls found");
 		((InputEventReceiverOverride*)((uint64_t)pcam + 0x38))->HookSink();
 	}
+	MenuWatcher* mw = new MenuWatcher();
+	UI::GetSingleton()->GetEventSource<MenuOpenCloseEvent>()->RegisterSink(mw);
 }
 
-extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a_f4se, F4SE::PluginInfo* a_info)
-{
+extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface * a_f4se, F4SE::PluginInfo * a_info) {
 #ifndef NDEBUG
 	auto sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
 #else
@@ -211,7 +229,7 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a
 	a_info->version = Version::MAJOR;
 
 	if (a_f4se->IsEditor()) {
-		logger::critical("loaded in editor"sv);
+		logger::critical(FMT_STRING("loaded in editor"));
 		return false;
 	}
 
@@ -224,8 +242,7 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Query(const F4SE::QueryInterface* a
 	return true;
 }
 
-extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f4se)
-{
+extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface * a_f4se) {
 	F4SE::Init(a_f4se);
 
 	const F4SE::MessagingInterface* message = F4SE::GetMessagingInterface();
@@ -234,9 +251,11 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f
 			InitializePlugin();
 			RemapMelee();
 			LoadConfigs();
-		} else if (msg->type == F4SE::MessagingInterface::kPreLoadGame) {
+		}
+		else if (msg->type == F4SE::MessagingInterface::kPreLoadGame) {
 			LoadConfigs();
-		} else if (msg->type == F4SE::MessagingInterface::kNewGame) {
+		}
+		else if (msg->type == F4SE::MessagingInterface::kNewGame) {
 			LoadConfigs();
 		}
 	});
